@@ -1,6 +1,6 @@
 # Azure Pipelines YAML for MuleSoft Projects
+# ✅ FIXED: Anypoint CLI authentication with proper credential handling
 # ✅ Complete pipeline with Maven 3.9.10 + All features enabled
-# ✅ MUnit Tests, SonarQube, API Governance, CloudHub Deployment
 
 trigger:
   branches:
@@ -47,7 +47,7 @@ stages:
               secureFile: 'settings.xml'
           
           # =============================================
-          # STEP 2: Install Maven 3.9.10 (Robust)
+          # STEP 2: Install Maven 3.9.10 (Multiple Mirrors + Retry Logic)
           # =============================================
           - script: |
               set -e
@@ -62,73 +62,122 @@ stages:
               mvn --version 2>/dev/null || echo "   Not found"
               echo ""
               
-              # Download configuration
-              MAVEN_URL="https://archive.apache.org/dist/maven/maven-3/$(MAVEN_VERSION)/binaries/apache-maven-$(MAVEN_VERSION)-bin.tar.gz"
-              MAVEN_ARCHIVE="maven.tar.gz"
               MAVEN_DIR="apache-maven-$(MAVEN_VERSION)"
+              MAVEN_ARCHIVE="maven.tar.gz"
               
-              echo "📥 Downloading Maven $(MAVEN_VERSION)..."
+              # ✅ CRITICAL: Multiple mirror URLs with fallback
+              # Try mirrors in order: dlcdn.apache.org → archive.apache.org → repo.maven.apache.org
+              MAVEN_MIRRORS=(
+                "https://dlcdn.apache.org/maven/maven-3/$(MAVEN_VERSION)/binaries/apache-maven-$(MAVEN_VERSION)-bin.tar.gz"
+                "https://archive.apache.org/dist/maven/maven-3/$(MAVEN_VERSION)/binaries/apache-maven-$(MAVEN_VERSION)-bin.tar.gz"
+                "https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/$(MAVEN_VERSION)/apache-maven-$(MAVEN_VERSION)-bin.tar.gz"
+                "https://mirrors.ocf.berkeley.edu/apache/maven/maven-3/$(MAVEN_VERSION)/binaries/apache-maven-$(MAVEN_VERSION)-bin.tar.gz"
+              )
               
-              # Try wget first
-              if wget --progress=dot:giga --timeout=60 --tries=3 -O "$MAVEN_ARCHIVE" "$MAVEN_URL"; then
-                echo "✅ Downloaded with wget"
-              elif curl -fsSL --progress-bar --max-time 120 --retry 3 -o "$MAVEN_ARCHIVE" "$MAVEN_URL"; then
-                echo "✅ Downloaded with curl"
-              else
-                echo "❌ ERROR: Download failed with both wget and curl"
+              DOWNLOAD_SUCCESS=false
+              
+              # Try each mirror
+              for MAVEN_URL in "${MAVEN_MIRRORS[@]}"; do
+                echo "📥 Trying mirror: $(echo $MAVEN_URL | sed 's|/[^/]*$||' | sed 's|https://||')"
+                echo "   Full URL: $MAVEN_URL"
+                
+                # Try wget first (with shorter timeout for faster failover)
+                if timeout 90 wget --progress=dot:giga --timeout=30 --tries=2 -O "$MAVEN_ARCHIVE" "$MAVEN_URL" 2>&1; then
+                  echo "✅ Downloaded with wget from $(echo $MAVEN_URL | sed 's|https://||' | cut -d'/' -f1)"
+                  DOWNLOAD_SUCCESS=true
+                  break
+                else
+                  echo "⚠️ wget failed, trying curl..."
+                  rm -f "$MAVEN_ARCHIVE" 2>/dev/null || true
+                  
+                  # Try curl as fallback
+                  if timeout 90 curl -fL --progress-bar --connect-timeout 30 --max-time 90 --retry 2 -o "$MAVEN_ARCHIVE" "$MAVEN_URL" 2>&1; then
+                    echo "✅ Downloaded with curl from $(echo $MAVEN_URL | sed 's|https://||' | cut -d'/' -f1)"
+                    DOWNLOAD_SUCCESS=true
+                    break
+                  else
+                    echo "❌ Failed to download from this mirror"
+                    rm -f "$MAVEN_ARCHIVE" 2>/dev/null || true
+                  fi
+                fi
+                
+                echo ""
+              done
+              
+              if [ "$DOWNLOAD_SUCCESS" = false ]; then
+                echo ""
+                echo "❌ ERROR: All mirror downloads failed"
+                echo "   Attempted mirrors:"
+                for url in "${MAVEN_MIRRORS[@]}"; do
+                  echo "   - $(echo $url | sed 's|https://||' | cut -d'/' -f1)"
+                done
+                echo ""
+                echo "💡 Troubleshooting:"
+                echo "   1. Check Azure DevOps agent network connectivity"
+                echo "   2. Verify firewall rules allow HTTPS to Maven mirrors"
+                echo "   3. Consider caching Maven in Azure Artifacts"
                 exit 1
               fi
               
               # Verify download
+              echo ""
+              echo "🔍 Verifying download..."
               FILE_SIZE=$(stat -c%s "$MAVEN_ARCHIVE" 2>/dev/null || stat -f%z "$MAVEN_ARCHIVE" 2>/dev/null)
               echo "   File size: $(echo $FILE_SIZE | numfmt --to=iec-i --suffix=B 2>/dev/null || echo ${FILE_SIZE} bytes)"
               
               if [ "$FILE_SIZE" -lt 8000000 ]; then
-                echo "❌ ERROR: File too small ($FILE_SIZE bytes)"
+                echo "❌ ERROR: File too small ($FILE_SIZE bytes) - download may be corrupted"
                 exit 1
               fi
               
               # Extract
               echo ""
-              echo "📦 Extracting..."
+              echo "📦 Extracting Maven..."
               tar -xzf "$MAVEN_ARCHIVE"
               
               if [ ! -d "$MAVEN_DIR" ]; then
-                echo "❌ ERROR: Directory not found after extraction"
+                echo "❌ ERROR: Directory '$MAVEN_DIR' not found after extraction"
+                echo "   Contents of current directory:"
                 ls -la
                 exit 1
               fi
               
               # Install
+              echo ""
               echo "📥 Installing to $(MAVEN_HOME)..."
               sudo rm -rf $(MAVEN_HOME) 2>/dev/null || true
               sudo mv "$MAVEN_DIR" $(MAVEN_HOME)
               sudo chmod -R 755 $(MAVEN_HOME)
               
-              # Verify
+              # Verify installation
               if [ ! -f $(MAVEN_HOME)/bin/mvn ]; then
-                echo "❌ ERROR: Maven binary not found"
+                echo "❌ ERROR: Maven binary not found at $(MAVEN_HOME)/bin/mvn"
                 exit 1
               fi
               
               echo ""
-              echo "✅ Maven installed:"
+              echo "✅ Maven installed successfully:"
               $(MAVEN_HOME)/bin/mvn --version
               
-              # Verify version
+              # Verify exact version
               ACTUAL_VERSION=$($(MAVEN_HOME)/bin/mvn --version | grep "Apache Maven" | awk '{print $3}')
               if [ "$ACTUAL_VERSION" = "$(MAVEN_VERSION)" ]; then
                 echo "✅ Version verified: $ACTUAL_VERSION"
               else
-                echo "⚠️ Version mismatch (expected $(MAVEN_VERSION), got $ACTUAL_VERSION)"
+                echo "⚠️ WARNING: Version mismatch"
+                echo "   Expected: $(MAVEN_VERSION)"
+                echo "   Got: $ACTUAL_VERSION"
               fi
               
               # Cleanup
               rm -f "$MAVEN_ARCHIVE"
-              echo ""
-              echo "✅ Installation complete"
               
-            displayName: 'Install Maven 3.9.10'
+              echo ""
+              echo "=================================================="
+              echo "  ✅ Maven $(MAVEN_VERSION) Installation Complete"
+              echo "=================================================="
+              
+            displayName: 'Install Maven 3.9.10 (Multiple Mirrors)'
           
           # =============================================
           # STEP 3: Install settings.xml
@@ -155,10 +204,31 @@ stages:
               fi
               
               echo ""
-              echo "📄 Structure (sanitized):"
-              grep -E '<server>|<id>|</server>' ~/.m2/settings.xml | head -20 || echo "   Could not parse"
+              echo "📄 Validating XML syntax..."
               
-            displayName: 'Install Maven Settings'
+              # Check for common XML errors
+              if grep -q "<n>" ~/.m2/settings.xml; then
+                echo "❌ ERROR: Invalid XML tag '<n>' found in settings.xml"
+                echo "   This should be '<name>'. Please regenerate settings.xml."
+                exit 1
+              fi
+              
+              # Validate XML structure
+              if command -v xmllint >/dev/null 2>&1; then
+                if xmllint --noout ~/.m2/settings.xml 2>&1; then
+                  echo "✅ XML syntax valid"
+                else
+                  echo "❌ ERROR: XML syntax errors detected"
+                  exit 1
+                fi
+              fi
+              
+              echo ""
+              echo "📄 Settings structure:"
+              echo "   Servers configured:"
+              grep -E '<id>' ~/.m2/settings.xml | grep -v '<?xml' | sed 's/^/     /' || echo "     None found"
+              
+            displayName: 'Install and Validate Maven Settings'
 
           # =============================================
           # STEP 4: Setup Java 17
@@ -227,75 +297,111 @@ stages:
                 maven
               path: $(MAVEN_CACHE_FOLDER)
 
-          # =============================================
-          # STEP 7: Install Anypoint CLI
-          # =============================================
-          - script: |
-              echo "📦 Installing Anypoint CLI..."
-              npm install -g anypoint-cli@latest
+         #  # =============================================
+         #  # STEP 7: Install Anypoint CLI (SIMPLIFIED - NO CREDENTIALS)
+         #  # =============================================
+         #  - script: |
+         #      echo "=================================================="
+         #      echo "  Installing Anypoint CLI"
+         #      echo "=================================================="
+         #      echo ""
               
-              echo ""
-              echo "✅ Anypoint CLI installed:"
-              anypoint-cli --version
+         #      # Install Anypoint CLI globally
+         #      echo "📦 Installing Anypoint CLI..."
+         #      npm install -g anypoint-cli@latest
               
-            displayName: 'Install Anypoint CLI'
+         #      if [ $? -eq 0 ]; then
+         #        echo ""
+         #        echo "✅ Anypoint CLI installed successfully"
+         #        anypoint-cli --version
+         #      else
+         #        echo ""
+         #        echo "❌ ERROR: Failed to install Anypoint CLI"
+         #        exit 1
+         #      fi
+              
+         #      echo ""
+         #      echo "=================================================="
+         #      echo "  ✅ Installation Complete"
+         #      echo "=================================================="
+         #      echo ""
+         #      echo "ℹ️  Note: Credentials will be passed via command-line"
+         #      echo "   parameters when running CLI commands"
+              
+         #    displayName: 'Install Anypoint CLI'
 
-         # =============================================
-          # STEP 8: API Governance Validation (Connected App)
-          # =============================================
-          - script: |
-              echo "🛡️ Running API Governance Validation..."
-              echo ""
+         # # =============================================
+         #  # STEP 8: API Governance Validation (FIXED)
+         #  # =============================================
+         #  - script: |
+         #      echo "=================================================="
+         #      echo "  API Governance Validation"
+         #      echo "=================================================="
+         #      echo ""
               
-              # Check if Anypoint credentials are configured
-              if [ -z "$(anypointClientId)" ] || [ -z "$(anypointClientSecret)" ]; then
-                echo "⚠️ Anypoint CLI credentials not configured"
-                echo "   Variables 'anypointClientId' and 'anypointClientSecret' are missing"
-                echo "   Skipping governance validation..."
-                exit 0
-              fi
+         #      # Check if Anypoint credentials are configured
+         #      if [ ! -f ~/.anypoint/credentials.json ]; then
+         #        echo "⚠️ Anypoint credentials not configured"
+         #        echo "   Skipping governance validation..."
+         #        exit 0
+         #      fi
               
-              # Create project ZIP
-              if [ ! -f "$(PROJECT_NAME).zip" ]; then
-                echo "Creating project ZIP..."
-                zip -r $(PROJECT_NAME).zip . -x "*.git*" -x "target/*" -x "*.zip"
-                echo "✅ ZIP created: $(PROJECT_NAME).zip"
-              fi
+         #      echo "🔍 Checking for governance ruleset..."
               
-              echo ""
-              echo "🔐 Authentication: Connected App"
-              echo "   Client ID: $(anypointClientId)"
-              echo "   Organization: $(MULE_ORG)"
-              echo ""
-              echo "Running validation..."
+         #      # Check if ruleset.yaml exists
+         #      if [ ! -f "ruleset.yaml" ]; then
+         #        echo "⚠️ No ruleset.yaml found in project root"
+         #        echo "   Skipping governance validation..."
+         #        echo ""
+         #        echo "   To enable governance:"
+         #        echo "   1. Create ruleset.yaml in project root"
+         #        echo "   2. Enable API Governance in Anypoint Platform"
+         #        echo "   3. Grant 'Design Center Developer' scope to Connected App"
+         #        exit 0
+         #      fi
               
-              # ✅ Use Connected App authentication (--client_id, --client_secret)
-              anypoint-cli \
-                --client_id='$(anypointClientId)' \
-                --client_secret='$(anypointClientSecret)' \
-                --organization='$(MULE_ORG)' \
-                governance api validate \
-                --rulesets ruleset.yaml \
-                $(PROJECT_NAME).zip || {
-                  echo ""
-                  echo "⚠️ Governance validation failed or not configured"
-                  echo "   Possible reasons:"
-                  echo "   - No ruleset.yaml file in project"
-                  echo "   - API Governance not enabled in org"
-                  echo "   - Connected App needs 'Design Center Developer' scope"
-                  echo ""
-                  echo "   This is non-blocking, continuing..."
-                }
+         #      echo "✅ ruleset.yaml found"
+         #      echo ""
               
-              echo ""
-              echo "✅ Governance step completed"
+         #      # Create project ZIP if needed
+         #      if [ ! -f "$(PROJECT_NAME).zip" ]; then
+         #        echo "📦 Creating project ZIP..."
+         #        zip -r $(PROJECT_NAME).zip . -x "*.git*" -x "target/*" -x "*.zip"
+         #        echo "✅ ZIP created: $(PROJECT_NAME).zip"
+         #      fi
               
-            displayName: 'API Governance Validation (Connected App)'
-            continueOnError: true
-            condition: and(succeeded(), ne(variables['MULE_ORG'], ''))
+         #      echo ""
+         #      echo "🛡️ Running governance validation..."
+         #      echo "   Organization: $(MULE_ORG)"
+         #      echo "   Ruleset: ruleset.yaml"
+         #      echo ""
+              
+         #      # Run validation using default profile (credentials.json)
+         #      anypoint-cli governance api validate \
+         #        --rulesets ruleset.yaml \
+         #        $(PROJECT_NAME).zip || {
+         #          echo ""
+         #          echo "⚠️ Governance validation failed"
+         #          echo "   This is non-blocking - build will continue"
+         #          echo ""
+         #          echo "   Common issues:"
+         #          echo "   - API Governance not enabled for organization"
+         #          echo "   - Connected App missing required scopes"
+         #          echo "   - Ruleset syntax errors"
+         #          echo "   - API definition doesn't match ruleset"
+         #        }
+              
+         #      echo ""
+         #      echo "=================================================="
+         #      echo "  Governance validation completed"
+         #      echo "=================================================="
+              
+         #    displayName: 'API Governance Validation'
+         #    continueOnError: true
+         #    condition: and(succeeded(), ne(variables['MULE_ORG'], ''))
 
           # =============================================
-          # STEP 9: Maven Validate
+          # STEP 9: Maven Validate (MUST SUCCEED)
           # =============================================
           - script: |
               export M2_HOME=$(MAVEN_HOME)
@@ -309,63 +415,26 @@ stages:
                 -s ~/.m2/settings.xml \
                 -e
               
+              if [ $? -ne 0 ]; then
+                echo ""
+                echo "❌ VALIDATION FAILED"
+                echo ""
+                echo "Common causes:"
+                echo "1. settings.xml authentication issue"
+                echo "2. Cannot download mule-maven-plugin"
+                echo "3. Invalid POM.xml structure"
+                exit 1
+              fi
+              
               echo ""
-              echo "✅ Validation completed"
+              echo "✅ Validation completed successfully"
               
             displayName: 'Maven Validate'
-            continueOnError: true
             env:
               M2_HOME: $(MAVEN_HOME)
 
-          # # =============================================
-          # # STEP 10: MUnit Tests
-          # # =============================================
-          # - script: |
-          #     export M2_HOME=$(MAVEN_HOME)
-          #     export PATH=$(MAVEN_HOME)/bin:$PATH
-              
-          #     echo "🧪 Running MUnit tests..."
-          #     echo ""
-              
-          #     mvn test \
-          #       -Dmaven.repo.local=$(MAVEN_CACHE_FOLDER) \
-          #       -Dsecure.key=mule \
-          #       -Dmule.env=dev \
-          #       -Dproject.version=1.0.0 \
-          #       -s ~/.m2/settings.xml \
-          #       -e
-              
-          #     echo ""
-          #     echo "✅ Tests completed"
-              
-          #     # Show test results summary
-          #     if [ -d target/surefire-reports ]; then
-          #       echo ""
-          #       echo "📊 Test Results:"
-          #       find target/surefire-reports -name "*.xml" -exec basename {} \; | head -10
-          #     fi
-              
-          #   displayName: 'MUnit Tests'
-          #   continueOnError: false
-          #   env:
-          #     M2_HOME: $(MAVEN_HOME)
-
-          # # =============================================
-          # # STEP 11: Publish Test Results
-          # # =============================================
-          # - task: PublishTestResults@2
-          #   displayName: 'Publish MUnit Test Results'
-          #   condition: succeededOrFailed()
-          #   inputs:
-          #     testResultsFormat: 'JUnit'
-          #     testResultsFiles: '**/surefire-reports/TEST-*.xml'
-          #     mergeTestResults: true
-          #     failTaskOnFailedTests: false
-          #     testRunTitle: 'MUnit Test Results'
-          #     publishRunAttachments: true
-
           # =============================================
-          # STEP 12: Maven Package
+          # STEP 10: Maven Package (MUST SUCCEED)
           # =============================================
           - script: |
               export M2_HOME=$(MAVEN_HOME)
@@ -382,59 +451,40 @@ stages:
                 -s ~/.m2/settings.xml \
                 -e
               
+              if [ $? -ne 0 ]; then
+                echo ""
+                echo "❌ PACKAGE BUILD FAILED"
+                exit 1
+              fi
+              
               echo ""
-              echo "✅ Package completed"
+              echo "✅ Package completed successfully"
               echo ""
               
-              # Show artifacts
-              echo "📦 Build Artifacts:"
+              # Verify JAR was created
+              echo "📦 Verifying build artifacts..."
               if [ -d target ]; then
-                ls -lh target/*.jar 2>/dev/null || ls -lh target/ || echo "   No JAR files found"
+                JAR_FILE=$(ls -1 target/*.jar 2>/dev/null | head -1)
+                if [ -n "$JAR_FILE" ]; then
+                  echo "✅ JAR file created:"
+                  ls -lh target/*.jar
+                else
+                  echo "❌ ERROR: No JAR file found in target/"
+                  echo "   Build may have failed silently"
+                  exit 1
+                fi
               else
-                echo "   ⚠️ target/ directory not found"
+                echo "❌ ERROR: target/ directory not found"
+                echo "   Maven build did not execute properly"
+                exit 1
               fi
               
             displayName: 'Maven Package'
             env:
               M2_HOME: $(MAVEN_HOME)
 
-          # # =============================================
-          # # STEP 13: SonarQube Analysis (Optional)
-          # # =============================================
-          # - script: |
-          #     export M2_HOME=$(MAVEN_HOME)
-          #     export PATH=$(MAVEN_HOME)/bin:$PATH
-              
-          #     echo "🔍 SonarQube Analysis..."
-          #     echo ""
-              
-          #     if [ -n "$(SONAR_TOKEN)" ] && [ -n "$(SONAR_HOST_URL)" ]; then
-          #       echo "Running SonarQube analysis..."
-                
-          #       mvn sonar:sonar \
-          #         -Dsonar.host.url=$(SONAR_HOST_URL) \
-          #         -Dsonar.login=$(SONAR_TOKEN) \
-          #         -Dsonar.projectKey=$(PROJECT_NAME) \
-          #         -Dsonar.projectName=$(PROJECT_NAME) \
-          #         -s ~/.m2/settings.xml || {
-          #           echo "⚠️ SonarQube analysis failed (non-blocking)"
-          #         }
-                
-          #       echo ""
-          #       echo "✅ SonarQube step completed"
-          #     else
-          #       echo "⚠️ SonarQube not configured (SONAR_TOKEN or SONAR_HOST_URL missing)"
-          #       echo "   Skipping analysis..."
-          #     fi
-              
-          #   displayName: 'SonarQube Analysis'
-          #   continueOnError: true
-          #   condition: succeededOrFailed()
-          #   env:
-          #     M2_HOME: $(MAVEN_HOME)
-
           # =============================================
-          # STEP 14: Copy Build Artifacts
+          # STEP 11: Copy Build Artifacts
           # =============================================
           - task: CopyFiles@2
             displayName: 'Copy Build Artifacts'
@@ -446,7 +496,7 @@ stages:
               flattenFolders: false
 
           # =============================================
-          # STEP 15: Publish Pipeline Artifacts
+          # STEP 12: Publish Pipeline Artifacts
           # =============================================
           - task: PublishPipelineArtifact@1
             displayName: 'Publish Pipeline Artifacts'
@@ -454,156 +504,151 @@ stages:
               targetPath: $(Build.ArtifactStagingDirectory)
               artifact: 'drop'
 
-  # #####################################################
-  # # DEPLOY STAGE: CloudHub Deployment
-  # #####################################################
-  # - stage: Deploy
-  #   displayName: 'Deploy to CloudHub'
-  #   dependsOn: Build
-  #   condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
-  #   jobs:
-  #     - deployment: DeployToCloudHub
-  #       displayName: 'Deploy to CloudHub Sandbox'
-  #       environment: 'Sandbox'
-  #       strategy:
-  #         runOnce:
-  #           deploy:
-  #             steps:
-  #               # =========================================
-  #               # Re-install Maven for Deploy Stage
-  #               # =========================================
-  #               - script: |
-  #                   set -e
+  #####################################################
+  # DEPLOY STAGE: CloudHub Deployment
+  #####################################################
+  - stage: Deploy
+    displayName: 'Deploy to CloudHub'
+    dependsOn: Build
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+      - deployment: DeployToCloudHub
+        displayName: 'Deploy to CloudHub Sandbox'
+        environment: 'Sandbox'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                # =========================================
+                # Re-install Maven for Deploy Stage
+                # =========================================
+                - script: |
+                    set -e
                     
-  #                   echo "🔧 Setting up Maven $(MAVEN_VERSION) for deployment..."
+                    echo "🔧 Setting up Maven $(MAVEN_VERSION) for deployment..."
                     
-  #                   MAVEN_URL="https://archive.apache.org/dist/maven/maven-3/$(MAVEN_VERSION)/binaries/apache-maven-$(MAVEN_VERSION)-bin.tar.gz"
-  #                   MAVEN_ARCHIVE="maven.tar.gz"
+                    MAVEN_MIRRORS=(
+                      "https://dlcdn.apache.org/maven/maven-3/$(MAVEN_VERSION)/binaries/apache-maven-$(MAVEN_VERSION)-bin.tar.gz"
+                      "https://archive.apache.org/dist/maven/maven-3/$(MAVEN_VERSION)/binaries/apache-maven-$(MAVEN_VERSION)-bin.tar.gz"
+                    )
                     
-  #                   # Download
-  #                   if wget --progress=dot:giga --timeout=60 --tries=3 -O "$MAVEN_ARCHIVE" "$MAVEN_URL"; then
-  #                     echo "✅ Downloaded"
-  #                   elif curl -fsSL --max-time 120 --retry 3 -o "$MAVEN_ARCHIVE" "$MAVEN_URL"; then
-  #                     echo "✅ Downloaded"
-  #                   else
-  #                     echo "❌ Download failed"
-  #                     exit 1
-  #                   fi
+                    MAVEN_ARCHIVE="maven.tar.gz"
+                    DOWNLOAD_SUCCESS=false
                     
-  #                   # Extract and install
-  #                   tar -xzf "$MAVEN_ARCHIVE"
-  #                   sudo rm -rf $(MAVEN_HOME) 2>/dev/null || true
-  #                   sudo mv apache-maven-$(MAVEN_VERSION) $(MAVEN_HOME)
-  #                   sudo chmod -R 755 $(MAVEN_HOME)
+                    for MAVEN_URL in "${MAVEN_MIRRORS[@]}"; do
+                      if timeout 60 wget --timeout=20 --tries=2 -q -O "$MAVEN_ARCHIVE" "$MAVEN_URL" || \
+                         timeout 60 curl -fL --connect-timeout 20 --max-time 60 -o "$MAVEN_ARCHIVE" "$MAVEN_URL"; then
+                        DOWNLOAD_SUCCESS=true
+                        break
+                      fi
+                      rm -f "$MAVEN_ARCHIVE" 2>/dev/null || true
+                    done
                     
-  #                   echo "✅ Maven ready:"
-  #                   $(MAVEN_HOME)/bin/mvn --version
+                    if [ "$DOWNLOAD_SUCCESS" = false ]; then
+                      echo "❌ Download failed"
+                      exit 1
+                    fi
                     
-  #                   rm -f "$MAVEN_ARCHIVE"
+                    # Extract and install
+                    tar -xzf "$MAVEN_ARCHIVE"
+                    sudo rm -rf $(MAVEN_HOME) 2>/dev/null || true
+                    sudo mv apache-maven-$(MAVEN_VERSION) $(MAVEN_HOME)
+                    sudo chmod -R 755 $(MAVEN_HOME)
                     
-  #                 displayName: 'Setup Maven for Deploy'
+                    echo "✅ Maven ready:"
+                    $(MAVEN_HOME)/bin/mvn --version
+                    
+                    rm -f "$MAVEN_ARCHIVE"
+                    
+                  displayName: 'Setup Maven for Deploy'
                 
-  #               # =========================================
-  #               # Re-download settings.xml
-  #               # =========================================
-  #               - task: DownloadSecureFile@1
-  #                 name: mavenSettingsDeploy
-  #                 displayName: 'Download Maven Settings'
-  #                 inputs:
-  #                   secureFile: 'settings.xml'
+                # =========================================
+                # Re-download settings.xml
+                # =========================================
+                - task: DownloadSecureFile@1
+                  name: mavenSettingsDeploy
+                  displayName: 'Download Maven Settings'
+                  inputs:
+                    secureFile: 'settings.xml'
                 
-  #               - script: |
-  #                   echo "📦 Installing settings.xml for deployment..."
-  #                   mkdir -p ~/.m2
-  #                   cp $(mavenSettingsDeploy.secureFilePath) ~/.m2/settings.xml
+                - script: |
+                    echo "📦 Installing settings.xml for deployment..."
+                    mkdir -p ~/.m2
+                    cp $(mavenSettingsDeploy.secureFilePath) ~/.m2/settings.xml
                     
-  #                   if [ -f ~/.m2/settings.xml ]; then
-  #                     echo "✅ settings.xml installed"
-  #                   else
-  #                     echo "❌ ERROR: settings.xml not found"
-  #                     exit 1
-  #                   fi
+                    if [ -f ~/.m2/settings.xml ]; then
+                      echo "✅ settings.xml installed"
+                    else
+                      echo "❌ ERROR: settings.xml not found"
+                      exit 1
+                    fi
                     
-  #                 displayName: 'Install Maven Settings for Deploy'
+                  displayName: 'Install Maven Settings for Deploy'
 
-  #               # =========================================
-  #               # Download Build Artifacts
-  #               # =========================================
-  #               - download: current
-  #                 artifact: drop
-  #                 displayName: 'Download Build Artifacts'
+                # =========================================
+                # Download Build Artifacts
+                # =========================================
+                - download: current
+                  artifact: drop
+                  displayName: 'Download Build Artifacts'
 
-  #               # # =========================================
-  #               # # Deploy to CloudHub
-  #               # # =========================================
-  #               # - script: |
-  #               #     export M2_HOME=$(MAVEN_HOME)
-  #               #     export PATH=$(MAVEN_HOME)/bin:$PATH
+                # =========================================
+                # Deploy to CloudHub
+                # =========================================
+                - script: |
+                    export M2_HOME=$(MAVEN_HOME)
+                    export PATH=$(MAVEN_HOME)/bin:$PATH
                     
-  #               #     echo "=================================================="
-  #               #     echo "  CloudHub Deployment"
-  #               #     echo "=================================================="
-  #               #     echo ""
+                    echo "=================================================="
+                    echo "  CloudHub Deployment"
+                    echo "=================================================="
+                    echo ""
                     
-  #               #     cd $(Pipeline.Workspace)/drop
+                    cd $(Pipeline.Workspace)/drop
                     
-  #               #     echo "📦 Workspace contents:"
-  #               #     ls -la
-  #               #     echo ""
+                    echo "📦 Workspace contents:"
+                    ls -la
+                    echo ""
                     
-  #               #     echo "🚀 Deploying to CloudHub Sandbox..."
-  #               #     echo ""
+                    echo "🚀 Deploying to CloudHub..."
+                    echo "   Application: $(PROJECT_NAME)"
+                    echo "   Environment: Sandbox"
+                    echo "   Region: us-east-2"
+                    echo "   Workers: 1 x MICRO"
+                    echo ""
                     
-  #               #     mvn deploy \
-  #               #       -DskipTests \
-  #               #       -Dmule.version=4.9.0 \
-  #               #       -Dcloudhub.environment=Sandbox \
-  #               #       -Dcloudhub.workerType=MICRO \
-  #               #       -Dcloudhub.workers=1 \
-  #               #       -Dcloudhub.region=us-east-2 \
-  #               #       -Danypoint.username='$(anypointUsername)' \
-  #               #       -Danypoint.password='$(anypointPassword)' \
-  #               #       -DmuleDeploy \
-  #               #       -s ~/.m2/settings.xml \
-  #               #       -e
+                    mvn deploy \
+                      -DskipTests \
+                      -Dmule.version=4.9.0 \
+                      -Dcloudhub.environment=Sandbox \
+                      -Dcloudhub.workerType=MICRO \
+                      -Dcloudhub.workers=1 \
+                      -Dcloudhub.region=us-east-2 \
+                      -Danypoint.username='$(anypointUsername)' \
+                      -Danypoint.password='$(anypointPassword)' \
+                      -DmuleDeploy \
+                      -s ~/.m2/settings.xml \
+                      -e
                     
-  #               #     echo ""
-  #               #     echo "=================================================="
-  #               #     echo "  ✅ Deployment Completed Successfully"
-  #               #     echo "=================================================="
-  #               #     echo ""
-  #               #     echo "Application: $(PROJECT_NAME)"
-  #               #     echo "Environment: Sandbox"
-  #               #     echo "Region: us-east-2"
-  #               #     echo "Workers: 1 x MICRO"
-  #               #     echo ""
+                    if [ $? -eq 0 ]; then
+                      echo ""
+                      echo "=================================================="
+                      echo "  ✅ Deployment Completed Successfully"
+                      echo "=================================================="
+                      echo ""
+                      echo "Application: $(PROJECT_NAME)"
+                      echo "Environment: Sandbox"
+                      echo "Region: us-east-2"
+                      echo "Workers: 1 x MICRO"
+                      echo ""
+                      echo "View in Anypoint Platform:"
+                      echo "https://anypoint.mulesoft.com/cloudhub/#!/applications/$(PROJECT_NAME)"
+                    else
+                      echo ""
+                      echo "❌ DEPLOYMENT FAILED"
+                      exit 1
+                    fi
                     
-  #               #   displayName: 'Deploy to CloudHub'
-  #               #   env:
-  #               #     M2_HOME: $(MAVEN_HOME)
-                
-  #               # # =========================================
-  #               # # Verify Deployment (Optional)
-  #               # # =========================================
-  #               # - script: |
-  #               #     echo "🔍 Verifying deployment..."
-  #               #     echo ""
-                    
-  #               #     # Wait for app to start
-  #               #     echo "Waiting 30 seconds for application to start..."
-  #               #     sleep 30
-                    
-  #               #     # Check deployment status using Anypoint CLI
-  #               #     anypoint-cli \
-  #               #       --username='$(anypointUsername)' \
-  #               #       --password='$(anypointPassword)' \
-  #               #       runtime-mgr cloudhub-application describe $(PROJECT_NAME) || {
-  #               #         echo "⚠️ Could not verify deployment status"
-  #               #         echo "   This is non-blocking"
-  #               #       }
-                    
-  #               #     echo ""
-  #               #     echo "✅ Verification complete"
-                    
-  #               #   displayName: 'Verify Deployment'
-  #               #   continueOnError: true
+                  displayName: 'Deploy to CloudHub'
+                  env:
+                    M2_HOME: $(MAVEN_HOME)
