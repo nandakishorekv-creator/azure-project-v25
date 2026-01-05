@@ -297,108 +297,108 @@ stages:
                 maven
               path: $(MAVEN_CACHE_FOLDER)
 
-         #  # =============================================
-         #  # STEP 7: Install Anypoint CLI (SIMPLIFIED - NO CREDENTIALS)
-         #  # =============================================
-         #  - script: |
-         #      echo "=================================================="
-         #      echo "  Installing Anypoint CLI"
-         #      echo "=================================================="
-         #      echo ""
+          # =============================================
+          # STEP 7: Install Anypoint CLI (SIMPLIFIED - NO CREDENTIALS)
+          # =============================================
+          - script: |
+              echo "=================================================="
+              echo "  Installing Anypoint CLI"
+              echo "=================================================="
+              echo ""
               
-         #      # Install Anypoint CLI globally
-         #      echo "📦 Installing Anypoint CLI..."
-         #      npm install -g anypoint-cli@latest
+              # Install Anypoint CLI globally
+              echo "📦 Installing Anypoint CLI..."
+              npm install -g anypoint-cli@latest
               
-         #      if [ $? -eq 0 ]; then
-         #        echo ""
-         #        echo "✅ Anypoint CLI installed successfully"
-         #        anypoint-cli --version
-         #      else
-         #        echo ""
-         #        echo "❌ ERROR: Failed to install Anypoint CLI"
-         #        exit 1
-         #      fi
+              if [ $? -eq 0 ]; then
+                echo ""
+                echo "✅ Anypoint CLI installed successfully"
+                anypoint-cli --version
+              else
+                echo ""
+                echo "❌ ERROR: Failed to install Anypoint CLI"
+                exit 1
+              fi
               
-         #      echo ""
-         #      echo "=================================================="
-         #      echo "  ✅ Installation Complete"
-         #      echo "=================================================="
-         #      echo ""
-         #      echo "ℹ️  Note: Credentials will be passed via command-line"
-         #      echo "   parameters when running CLI commands"
+              echo ""
+              echo "=================================================="
+              echo "  ✅ Installation Complete"
+              echo "=================================================="
+              echo ""
+              echo "ℹ️  Note: Credentials will be passed via command-line"
+              echo "   parameters when running CLI commands"
               
-         #    displayName: 'Install Anypoint CLI'
+            displayName: 'Install Anypoint CLI'
 
-         # # =============================================
-         #  # STEP 8: API Governance Validation (FIXED)
-         #  # =============================================
-         #  - script: |
-         #      echo "=================================================="
-         #      echo "  API Governance Validation"
-         #      echo "=================================================="
-         #      echo ""
+         # =============================================
+          # STEP 8: API Governance Validation (FIXED)
+          # =============================================
+          - script: |
+              echo "=================================================="
+              echo "  API Governance Validation"
+              echo "=================================================="
+              echo ""
               
-         #      # Check if Anypoint credentials are configured
-         #      if [ ! -f ~/.anypoint/credentials.json ]; then
-         #        echo "⚠️ Anypoint credentials not configured"
-         #        echo "   Skipping governance validation..."
-         #        exit 0
-         #      fi
+              # Check if Anypoint credentials are configured
+              if [ ! -f ~/.anypoint/credentials.json ]; then
+                echo "⚠️ Anypoint credentials not configured"
+                echo "   Skipping governance validation..."
+                exit 0
+              fi
               
-         #      echo "🔍 Checking for governance ruleset..."
+              echo "🔍 Checking for governance ruleset..."
               
-         #      # Check if ruleset.yaml exists
-         #      if [ ! -f "ruleset.yaml" ]; then
-         #        echo "⚠️ No ruleset.yaml found in project root"
-         #        echo "   Skipping governance validation..."
-         #        echo ""
-         #        echo "   To enable governance:"
-         #        echo "   1. Create ruleset.yaml in project root"
-         #        echo "   2. Enable API Governance in Anypoint Platform"
-         #        echo "   3. Grant 'Design Center Developer' scope to Connected App"
-         #        exit 0
-         #      fi
+              # Check if ruleset.yaml exists
+              if [ ! -f "ruleset.yaml" ]; then
+                echo "⚠️ No ruleset.yaml found in project root"
+                echo "   Skipping governance validation..."
+                echo ""
+                echo "   To enable governance:"
+                echo "   1. Create ruleset.yaml in project root"
+                echo "   2. Enable API Governance in Anypoint Platform"
+                echo "   3. Grant 'Design Center Developer' scope to Connected App"
+                exit 0
+              fi
               
-         #      echo "✅ ruleset.yaml found"
-         #      echo ""
+              echo "✅ ruleset.yaml found"
+              echo ""
               
-         #      # Create project ZIP if needed
-         #      if [ ! -f "$(PROJECT_NAME).zip" ]; then
-         #        echo "📦 Creating project ZIP..."
-         #        zip -r $(PROJECT_NAME).zip . -x "*.git*" -x "target/*" -x "*.zip"
-         #        echo "✅ ZIP created: $(PROJECT_NAME).zip"
-         #      fi
+              # Create project ZIP if needed
+              if [ ! -f "$(PROJECT_NAME).zip" ]; then
+                echo "📦 Creating project ZIP..."
+                zip -r $(PROJECT_NAME).zip . -x "*.git*" -x "target/*" -x "*.zip"
+                echo "✅ ZIP created: $(PROJECT_NAME).zip"
+              fi
               
-         #      echo ""
-         #      echo "🛡️ Running governance validation..."
-         #      echo "   Organization: $(MULE_ORG)"
-         #      echo "   Ruleset: ruleset.yaml"
-         #      echo ""
+              echo ""
+              echo "🛡️ Running governance validation..."
+              echo "   Organization: $(MULE_ORG)"
+              echo "   Ruleset: ruleset.yaml"
+              echo ""
               
-         #      # Run validation using default profile (credentials.json)
-         #      anypoint-cli governance api validate \
-         #        --rulesets ruleset.yaml \
-         #        $(PROJECT_NAME).zip || {
-         #          echo ""
-         #          echo "⚠️ Governance validation failed"
-         #          echo "   This is non-blocking - build will continue"
-         #          echo ""
-         #          echo "   Common issues:"
-         #          echo "   - API Governance not enabled for organization"
-         #          echo "   - Connected App missing required scopes"
-         #          echo "   - Ruleset syntax errors"
-         #          echo "   - API definition doesn't match ruleset"
-         #        }
+              # Run validation using default profile (credentials.json)
+              anypoint-cli governance api validate \
+                --rulesets ruleset.yaml \
+                $(PROJECT_NAME).zip || {
+                  echo ""
+                  echo "⚠️ Governance validation failed"
+                  echo "   This is non-blocking - build will continue"
+                  echo ""
+                  echo "   Common issues:"
+                  echo "   - API Governance not enabled for organization"
+                  echo "   - Connected App missing required scopes"
+                  echo "   - Ruleset syntax errors"
+                  echo "   - API definition doesn't match ruleset"
+                }
               
-         #      echo ""
-         #      echo "=================================================="
-         #      echo "  Governance validation completed"
-         #      echo "=================================================="
+              echo ""
+              echo "=================================================="
+              echo "  Governance validation completed"
+              echo "=================================================="
               
-         #    displayName: 'API Governance Validation'
-         #    continueOnError: true
-         #    condition: and(succeeded(), ne(variables['MULE_ORG'], ''))
+            displayName: 'API Governance Validation'
+            continueOnError: true
+            condition: and(succeeded(), ne(variables['MULE_ORG'], ''))
 
           # =============================================
           # STEP 9: Maven Validate (MUST SUCCEED)
@@ -512,143 +512,141 @@ stages:
     dependsOn: Build
     condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
     jobs:
-      - deployment: DeployToCloudHub
+      - job: DeployToCloudHub
         displayName: 'Deploy to CloudHub Sandbox'
-        environment: 'Sandbox'
-        strategy:
-          runOnce:
-            deploy:
-              steps:
-                # =========================================
-                # Re-install Maven for Deploy Stage
-                # =========================================
-                - script: |
-                    set -e
-                    
-                    echo "🔧 Setting up Maven $(MAVEN_VERSION) for deployment..."
-                    
-                    MAVEN_MIRRORS=(
-                      "https://dlcdn.apache.org/maven/maven-3/$(MAVEN_VERSION)/binaries/apache-maven-$(MAVEN_VERSION)-bin.tar.gz"
-                      "https://archive.apache.org/dist/maven/maven-3/$(MAVEN_VERSION)/binaries/apache-maven-$(MAVEN_VERSION)-bin.tar.gz"
-                    )
-                    
-                    MAVEN_ARCHIVE="maven.tar.gz"
-                    DOWNLOAD_SUCCESS=false
-                    
-                    for MAVEN_URL in "${MAVEN_MIRRORS[@]}"; do
-                      if timeout 60 wget --timeout=20 --tries=2 -q -O "$MAVEN_ARCHIVE" "$MAVEN_URL" || \
-                         timeout 60 curl -fL --connect-timeout 20 --max-time 60 -o "$MAVEN_ARCHIVE" "$MAVEN_URL"; then
-                        DOWNLOAD_SUCCESS=true
-                        break
-                      fi
-                      rm -f "$MAVEN_ARCHIVE" 2>/dev/null || true
-                    done
-                    
-                    if [ "$DOWNLOAD_SUCCESS" = false ]; then
-                      echo "❌ Download failed"
-                      exit 1
-                    fi
-                    
-                    # Extract and install
-                    tar -xzf "$MAVEN_ARCHIVE"
-                    sudo rm -rf $(MAVEN_HOME) 2>/dev/null || true
-                    sudo mv apache-maven-$(MAVEN_VERSION) $(MAVEN_HOME)
-                    sudo chmod -R 755 $(MAVEN_HOME)
-                    
-                    echo "✅ Maven ready:"
-                    $(MAVEN_HOME)/bin/mvn --version
-                    
-                    rm -f "$MAVEN_ARCHIVE"
-                    
-                  displayName: 'Setup Maven for Deploy'
-                
-                # =========================================
-                # Re-download settings.xml
-                # =========================================
-                - task: DownloadSecureFile@1
-                  name: mavenSettingsDeploy
-                  displayName: 'Download Maven Settings'
-                  inputs:
-                    secureFile: 'settings.xml'
-                
-                - script: |
-                    echo "📦 Installing settings.xml for deployment..."
-                    mkdir -p ~/.m2
-                    cp $(mavenSettingsDeploy.secureFilePath) ~/.m2/settings.xml
-                    
-                    if [ -f ~/.m2/settings.xml ]; then
-                      echo "✅ settings.xml installed"
-                    else
-                      echo "❌ ERROR: settings.xml not found"
-                      exit 1
-                    fi
-                    
-                  displayName: 'Install Maven Settings for Deploy'
+        steps:
+          # =========================================
+          # Re-install Maven for Deploy Stage
+          # =========================================
+          - script: |
+              set -e
+              
+              echo "🔧 Setting up Maven $(MAVEN_VERSION) for deployment..."
+              
+              MAVEN_MIRRORS=(
+                "https://dlcdn.apache.org/maven/maven-3/$(MAVEN_VERSION)/binaries/apache-maven-$(MAVEN_VERSION)-bin.tar.gz"
+                "https://archive.apache.org/dist/maven/maven-3/$(MAVEN_VERSION)/binaries/apache-maven-$(MAVEN_VERSION)-bin.tar.gz"
+              )
+              
+              MAVEN_ARCHIVE="maven.tar.gz"
+              DOWNLOAD_SUCCESS=false
+              
+              for MAVEN_URL in "${MAVEN_MIRRORS[@]}"; do
+                if timeout 60 wget --timeout=20 --tries=2 -q -O "$MAVEN_ARCHIVE" "$MAVEN_URL" || \
+                   timeout 60 curl -fL --connect-timeout 20 --max-time 60 -o "$MAVEN_ARCHIVE" "$MAVEN_URL"; then
+                  DOWNLOAD_SUCCESS=true
+                  break
+                fi
+                rm -f "$MAVEN_ARCHIVE" 2>/dev/null || true
+              done
+              
+              if [ "$DOWNLOAD_SUCCESS" = false ]; then
+                echo "❌ Download failed"
+                exit 1
+              fi
+              
+              # Extract and install
+              tar -xzf "$MAVEN_ARCHIVE"
+              sudo rm -rf $(MAVEN_HOME) 2>/dev/null || true
+              sudo mv apache-maven-$(MAVEN_VERSION) $(MAVEN_HOME)
+              sudo chmod -R 755 $(MAVEN_HOME)
+              
+              echo "✅ Maven ready:"
+              $(MAVEN_HOME)/bin/mvn --version
+              
+              rm -f "$MAVEN_ARCHIVE"
+              
+            displayName: 'Setup Maven for Deploy'
+          
+          # =========================================
+          # Re-download settings.xml
+          # =========================================
+          - task: DownloadSecureFile@1
+            name: mavenSettingsDeploy
+            displayName: 'Download Maven Settings'
+            inputs:
+              secureFile: 'settings.xml'
+          
+          - script: |
+              echo "📦 Installing settings.xml for deployment..."
+              mkdir -p ~/.m2
+              cp $(mavenSettingsDeploy.secureFilePath) ~/.m2/settings.xml
+              
+              if [ -f ~/.m2/settings.xml ]; then
+                echo "✅ settings.xml installed"
+              else
+                echo "❌ ERROR: settings.xml not found"
+                exit 1
+              fi
+              
+            displayName: 'Install Maven Settings for Deploy'
 
-                # =========================================
-                # Download Build Artifacts
-                # =========================================
-                - download: current
-                  artifact: drop
-                  displayName: 'Download Build Artifacts'
+          # =========================================
+          # Download Build Artifacts
+          # =========================================
+          - task: DownloadPipelineArtifact@2
+            displayName: 'Download Build Artifacts'
+            inputs:
+              artifact: 'drop'
+              path: $(Pipeline.Workspace)/drop
 
-                # =========================================
-                # Deploy to CloudHub
-                # =========================================
-                - script: |
-                    export M2_HOME=$(MAVEN_HOME)
-                    export PATH=$(MAVEN_HOME)/bin:$PATH
-                    
-                    echo "=================================================="
-                    echo "  CloudHub Deployment"
-                    echo "=================================================="
-                    echo ""
-                    
-                    cd $(Pipeline.Workspace)/drop
-                    
-                    echo "📦 Workspace contents:"
-                    ls -la
-                    echo ""
-                    
-                    echo "🚀 Deploying to CloudHub..."
-                    echo "   Application: $(PROJECT_NAME)"
-                    echo "   Environment: Sandbox"
-                    echo "   Region: us-east-2"
-                    echo "   Workers: 1 x MICRO"
-                    echo ""
-                    
-                    mvn deploy \
-                      -DskipTests \
-                      -Dmule.version=4.9.0 \
-                      -Dcloudhub.environment=Sandbox \
-                      -Dcloudhub.workerType=MICRO \
-                      -Dcloudhub.workers=1 \
-                      -Dcloudhub.region=us-east-2 \
-                      -Danypoint.username='$(anypointUsername)' \
-                      -Danypoint.password='$(anypointPassword)' \
-                      -DmuleDeploy \
-                      -s ~/.m2/settings.xml \
-                      -e
-                    
-                    if [ $? -eq 0 ]; then
-                      echo ""
-                      echo "=================================================="
-                      echo "  ✅ Deployment Completed Successfully"
-                      echo "=================================================="
-                      echo ""
-                      echo "Application: $(PROJECT_NAME)"
-                      echo "Environment: Sandbox"
-                      echo "Region: us-east-2"
-                      echo "Workers: 1 x MICRO"
-                      echo ""
-                      echo "View in Anypoint Platform:"
-                      echo "https://anypoint.mulesoft.com/cloudhub/#!/applications/$(PROJECT_NAME)"
-                    else
-                      echo ""
-                      echo "❌ DEPLOYMENT FAILED"
-                      exit 1
-                    fi
-                    
-                  displayName: 'Deploy to CloudHub'
-                  env:
-                    M2_HOME: $(MAVEN_HOME)
+          # =========================================
+          # Deploy to CloudHub
+          # =========================================
+          - script: |
+              export M2_HOME=$(MAVEN_HOME)
+              export PATH=$(MAVEN_HOME)/bin:$PATH
+              
+              echo "=================================================="
+              echo "  CloudHub Deployment"
+              echo "=================================================="
+              echo ""
+              
+              cd $(Pipeline.Workspace)/drop
+              
+              echo "📦 Workspace contents:"
+              ls -la
+              echo ""
+              
+              echo "🚀 Deploying to CloudHub..."
+              echo "   Application: $(PROJECT_NAME)"
+              echo "   Environment: Sandbox"
+              echo "   Region: us-east-2"
+              echo "   Workers: 1 x MICRO"
+              echo ""
+              
+              mvn deploy \
+                -DskipTests \
+                -Dmule.version=4.9.0 \
+                -Dcloudhub.environment=Sandbox \
+                -Dcloudhub.workerType=MICRO \
+                -Dcloudhub.workers=1 \
+                -Dcloudhub.region=us-east-2 \
+                -Danypoint.username='$(anypointUsername)' \
+                -Danypoint.password='$(anypointPassword)' \
+                -DmuleDeploy \
+                -s ~/.m2/settings.xml \
+                -e
+              
+              if [ $? -eq 0 ]; then
+                echo ""
+                echo "=================================================="
+                echo "  ✅ Deployment Completed Successfully"
+                echo "=================================================="
+                echo ""
+                echo "Application: $(PROJECT_NAME)"
+                echo "Environment: Sandbox"
+                echo "Region: us-east-2"
+                echo "Workers: 1 x MICRO"
+                echo ""
+                echo "View in Anypoint Platform:"
+                echo "https://anypoint.mulesoft.com/cloudhub/#!/applications/$(PROJECT_NAME)"
+              else
+                echo ""
+                echo "❌ DEPLOYMENT FAILED"
+                exit 1
+              fi
+              
+            displayName: 'Deploy to CloudHub'
+            env:
+              M2_HOME: $(MAVEN_HOME)
