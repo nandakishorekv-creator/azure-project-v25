@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce"
+      xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core ./knowledge-base/schemas/mule-core.xsd
+        http://www.mulesoft.org/schema/mule/ee/core ./knowledge-base/schemas/mule-core.xsd
+        http://www.mulesoft.org/schema/mule/salesforce ./knowledge-base/schemas/mule-salesforce.xsd">
+
+  <flow name="post-leads-flow" doc:id="doc-f6a0d761">
+    <ee:transform doc:name="Prepare Lead Data" doc:id="doc-1a3bd0a4">
+      <ee:message doc:id="doc-ec9c162f">
+        <ee:set-payload doc:id="doc-6e5dc6ee" resource="dw/prepare-lead-data-1.dwl"></ee:set-payload>
+      </ee:message>
+    </ee:transform>
+    <salesforce:create config-ref="Salesforce_Config" type="Lead" doc:name="Create Lead" doc:id="doc-da025bf9"></salesforce:create>
+    <ee:transform doc:name="Format Response" doc:id="doc-5f51ff41">
+      <ee:message doc:id="doc-99266cf9">
+        <ee:set-payload doc:id="doc-78db1bee" resource="dw/format-response-2.dwl"></ee:set-payload>
+      </ee:message>
+    </ee:transform>
+    <error-handler ref="globalErrorHandler"></error-handler>
+  </flow>
+
+  <flow name="get-leads-flow" doc:id="doc-6a61622f">
+    <salesforce:query config-ref="Salesforce_Config" doc:name="Query Leads" doc:id="doc-64ef1961">
+      <salesforce:salesforce-query doc:id="doc-f3d3974d">
+        SELECT Id, FirstName, LastName, Company, Email, Phone, Status FROM Lead
+      </salesforce:salesforce-query>
+    </salesforce:query>
+    <ee:transform doc:name="Format Leads Response" doc:id="doc-6e2f907d">
+      <ee:message doc:id="doc-7a54b5c1">
+        <ee:set-payload doc:id="doc-7df7ba00" resource="dw/format-leads-response-3.dwl"></ee:set-payload>
+      </ee:message>
+    </ee:transform>
+    <error-handler ref="globalErrorHandler"></error-handler>
+  </flow>
+
+  <flow name="put-leads-flow" doc:id="doc-c97da71f">
+    <ee:transform doc:name="Prepare Update Data" doc:id="doc-7c6b70e0">
+      <ee:message doc:id="doc-38cd31f6">
+        <ee:set-payload doc:id="doc-ae90cf6f" resource="dw/prepare-update-data-4.dwl"></ee:set-payload>
+      </ee:message>
+    </ee:transform>
+    <salesforce:update config-ref="Salesforce_Config" type="Lead" doc:name="Update Lead" doc:id="doc-86a6a286"></salesforce:update>
+    <ee:transform doc:name="Format Response" doc:id="doc-c3068b08">
+      <ee:message doc:id="doc-5ff33b30">
+        <ee:set-payload doc:id="doc-69ea81f2" resource="dw/format-response-5.dwl"></ee:set-payload>
+      </ee:message>
+    </ee:transform>
+    <error-handler ref="globalErrorHandler"></error-handler>
+  </flow>
+
+  <flow name="delete-leads-flow" doc:id="doc-b8850fa0">
+    <ee:transform doc:name="Prepare Delete Data" doc:id="doc-6665e4f5">
+      <ee:message doc:id="doc-58b57071">
+        <ee:set-payload doc:id="doc-85f9726c" resource="dw/prepare-delete-data-6.dwl"></ee:set-payload>
+      </ee:message>
+    </ee:transform>
+    <salesforce:delete config-ref="Salesforce_Config" doc:name="Delete Lead" doc:id="doc-941ca720"></salesforce:delete>
+    <ee:transform doc:name="Format Response" doc:id="doc-91dbc0b8">
+      <ee:message doc:id="doc-c570ddf1">
+        <ee:set-payload doc:id="doc-ff19647a" resource="dw/format-response-7.dwl"></ee:set-payload>
+      </ee:message>
+    </ee:transform>
+    <error-handler ref="globalErrorHandler"></error-handler>
+  </flow>
+
+</mule>

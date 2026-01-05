@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns:apikit="http://www.mulesoft.org/schema/mule/apikit"
+      xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core ./knowledge-base/schemas/mule-core.xsd
+        http://www.mulesoft.org/schema/mule/http ./knowledge-base/schemas/mule-http.xsd
+        http://www.mulesoft.org/schema/mule/apikit ./knowledge-base/schemas/mule-apikit.xsd">
+
+  <flow name="azure-project-v25-api-main" doc:name="azure-project-v25 API Main" doc:id="54d3d95e-3fe3-a4d8-4e47-210dff9724d9">
+    <http:listener path="/api/${api.majorVersion}/*" config="HTTPS_Listener_Config" doc:name="HTTP Listener" doc:id="41b4905d-fc93-7975-1902-bb2bfbb6b8ca">
+      <http:response statusCode="#[vars.httpStatus default 200]">
+        <http:headers>
+          #[vars.outboundHeaders default {}]
+        </http:headers>
+      </http:response>
+      <http:error-response statusCode="#[vars.httpStatus default 500]">
+        <http:body>
+          #[payload]
+        </http:body>
+        <http:headers>
+          #[vars.outboundHeaders default {}]
+        </http:headers>
+      </http:error-response>
+    </http:listener>
+    <apikit:router config-ref="azure-project-v25-apikit-config" doc:name="APIKit Router" doc:id="489753d5-450c-a7a6-fbd9-d1ce511b62dc"></apikit:router>
+  </flow>
+
+  <flow name="post:\leads:application\json:azure-project-v25-apikit-config" doc:name="post:\leads:application\json:azure-project-v25-apikit-config" doc:id="7102beb6-24bc-b503-4916-95b39cd34c6d">
+    <flow-ref doc:name="post-leads-flow" doc:id="bc0a24c1-9a38-a15f-5660-15c69bc5f3f3" name="post-leads-flow"></flow-ref>
+  </flow>
+
+  <flow name="get:\leads:azure-project-v25-apikit-config" doc:name="get:\leads:azure-project-v25-apikit-config" doc:id="f8f03f76-c21f-80e0-11c2-d16ad0809043">
+    <flow-ref doc:name="get-leads-flow" doc:id="b216c4e5-8bde-6086-0fb0-ba0727aa6226" name="get-leads-flow"></flow-ref>
+  </flow>
+
+  <flow name="put:\leads:application\json:azure-project-v25-apikit-config" doc:name="put:\leads:application\json:azure-project-v25-apikit-config" doc:id="7afbad9e-95e3-8a76-9793-19ee02081652">
+    <flow-ref doc:name="put-leads-flow" doc:id="6d071dc6-2fe0-85f3-8a1f-30fdc27e22f4" name="put-leads-flow"></flow-ref>
+  </flow>
+
+  <flow name="delete:\leads:azure-project-v25-apikit-config" doc:name="delete:\leads:azure-project-v25-apikit-config" doc:id="416ac5f7-b13f-5a51-8215-d800e00089ef">
+    <flow-ref doc:name="delete-leads-flow" doc:id="68141864-90e5-f438-4053-7875913282ba" name="delete-leads-flow"></flow-ref>
+  </flow>
+
+  <flow name="post:\opportunities:application\json:azure-project-v25-apikit-config" doc:name="post:\opportunities:application\json:azure-project-v25-apikit-config" doc:id="e7cb57bf-6c43-dbfe-540e-0947530d6f8f">
+    <flow-ref doc:name="post-opportunities-flow" doc:id="bb5025cc-8cbf-cb3a-b643-6b2a342ca7b9" name="post-opportunities-flow"></flow-ref>
+  </flow>
+
+  <flow name="get:\opportunities:azure-project-v25-apikit-config" doc:name="get:\opportunities:azure-project-v25-apikit-config" doc:id="9edb9887-74d2-2278-fb68-c38d66353b8c">
+    <flow-ref doc:name="get-opportunities-flow" doc:id="3a9acc04-4259-9ecb-634a-fa7d1e0ff904" name="get-opportunities-flow"></flow-ref>
+  </flow>
+
+  <flow name="put:\opportunities:application\json:azure-project-v25-apikit-config" doc:name="put:\opportunities:application\json:azure-project-v25-apikit-config" doc:id="df87c28d-b4d0-cc53-92a6-9246b7996668">
+    <flow-ref doc:name="put-opportunities-flow" doc:id="825bf505-fddc-8b43-75cc-ba836688194c" name="put-opportunities-flow"></flow-ref>
+  </flow>
+
+  <flow name="delete:\opportunities:azure-project-v25-apikit-config" doc:name="delete:\opportunities:azure-project-v25-apikit-config" doc:id="6baf8949-74f6-49e5-413b-7b9b62e68bdd">
+    <flow-ref doc:name="delete-opportunities-flow" doc:id="1d1b444f-eaf1-1c44-38c6-0c02585100e4" name="delete-opportunities-flow"></flow-ref>
+  </flow>
+
+  <flow name="get:/readiness:azure-project-v25-apikit-config" doc:name="get:/readiness:azure-project-v25-apikit-config" doc:id="d1e8a7ca-588f-5332-605c-869b5f6bebb3">
+    <flow-ref doc:name="readiness-check-subflow" doc:id="a32a188b-c614-17a7-8d59-cfe0d0aa3cb7" name="readiness-check-subflow"></flow-ref>
+  </flow>
+
+</mule>

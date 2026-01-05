@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce"
+      xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core ./knowledge-base/schemas/mule-core.xsd
+        http://www.mulesoft.org/schema/mule/salesforce ./knowledge-base/schemas/mule-salesforce.xsd
+        http://www.mulesoft.org/schema/mule/ee/core ./knowledge-base/schemas/mule-core.xsd">
+
+  <sub-flow name="readiness-check-subflow" doc:name="Salesforce Readiness Check" doc:id="70d65467-069e-89b7-90e3-7322d8d4ed9b">
+    <try doc:name="Try" doc:id="38abf5b6-cbdc-b95e-7174-f51d647a6e31">
+      <salesforce:query doc:name="Get Top 2 Accounts From Salesforce Object" doc:id="74d67de1-25e0-a976-1b26-e4b7f0adcf06" config-ref="Salesforce_Config">
+        <salesforce:salesforce-query>
+          SELECT Account.Id FROM Account LIMIT 2
+        </salesforce:salesforce-query>
+      </salesforce:query>
+      <error-handler>
+        <on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="f3cdfe18-67e3-1142-c9af-e9c570ae2029">
+          <logger level="INFO" doc:name="Logger" doc:id="cb09c98b-a722-ed9b-8480-9cbe61eb4a73" message="Salesforce health check failed"></logger>
+        </on-error-continue>
+      </error-handler>
+    </try>
+    <ee:transform doc:name="Readiness Response" doc:id="56fd0a9d-9943-4fbf-25d6-de69e168014d">
+      <ee:message>
+        <ee:set-payload>
+          %dw 2.0
+output application/json
+---
+{
+	servicename: "salesforce",
+	status: if(payload[0].Id == null)
+		"down"
+	else
+		"up"
+}
+        </ee:set-payload>
+      </ee:message>
+    </ee:transform>
+  </sub-flow>
+
+</mule>
